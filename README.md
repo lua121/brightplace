@@ -22,7 +22,9 @@ This is a frontend exercise, so all filtering logic runs in the browser against 
 
 ### NLP-style scoring search
 
-Rather than building a traditional faceted filter UI (dropdowns for city, sliders for price), I chose a conversational single-input approach that feels more natural. Queries are parsed into structured filters (city, state, beds, max price) plus free-text keywords. Each listing is scored against these dimensions — city match is weighted highest (10), beds/price at 8, state at 5, keyword/amenity hits at 3. Results are hard-filtered first, then ranked by score. This gives users flexibility: "1br in Denver under $1,500" and "pool in Texas" both work naturally.
+As specified in the exercise requirements, the app uses a conversational single-input approach instead of a traditional faceted filter UI (dropdowns for city, sliders for price). Queries are parsed into structured filters (city, state, beds, price range, square footage range, availability) plus free-text keywords. Each listing is scored against these dimensions — city match is weighted highest (10), beds/price/sqft/availability at 8, state at 5, keyword/amenity hits at 3. Results are hard-filtered first, then ranked by score. This gives users flexibility: "1br in Denver under $1,500", "bigger than 800 sqft available today", and "pool in Texas" all work naturally.
+
+Keywords that don't match anything in the dataset (e.g., "in Brazil") correctly produce zero results, preventing false positives when combining unknown locations with valid filters.
 
 The tradeoff is discoverability — users don't know what filters are available without trying. The example query buttons mitigate this by showing what kinds of queries work.
 
@@ -59,7 +61,7 @@ SearchInterface       — orchestrates state, search, sort, URL sync
 
 Vitest with jsdom. Tests cover:
 
-- **Search engine** (`parseQuery`, `searchListings`) — 17 cases covering city/state/beds/price parsing, combined queries, edge cases, score ordering, and empty/no-match states.
+- **Search engine** (`parseQuery`, `searchListings`) — 40 cases covering city/state/beds/price/sqft/availability parsing, combined queries, unmatched keyword filtering, edge cases, score ordering, and empty/no-match states.
 - **UI integration** (`SearchInterface`) — 13 cases covering render, welcome state, skeleton loading, filtering, empty state, sort toggling, comparison bar visibility, image fallback, and example query buttons.
 
 ## Deployment
