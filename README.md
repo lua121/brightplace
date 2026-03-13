@@ -17,8 +17,8 @@ npm run lint     # ESLint
 ### NLP-style scoring search
 Queries are parsed into structured filters (city, state, beds, max price) plus free-text keywords. Each listing is scored against these dimensions — city match is weighted highest (10), beds/price at 8, state at 5, keyword/amenity hits at 3. Results are filtered by hard constraints first, then ranked by score. This gives users flexibility: "1br in Denver under $1,500" and "pool in Texas" both work naturally.
 
-### No fake loading delay
-The search runs synchronously against an in-memory dataset of 6 listings. A previous version added a 600 ms `setTimeout` to simulate a network call — this was removed because it hurts perceived performance and misrepresents how the app works. Skeletons are still available as a component (`SkeletonGrid`) for future async data sources.
+### Simulated loading state
+The search runs synchronously against an in-memory dataset of 6 listings. A brief 400 ms delay is added so the skeleton loading state (`SkeletonGrid`) is visible to the user — mirroring the experience of a real API call. In production this delay would be replaced by the actual network round-trip. The search button is disabled during loading to prevent request stacking.
 
 ### Vitest for testing
 Vitest was chosen over Jest for zero-config Vite compatibility, fast startup, and native ESM/TypeScript support. Tests cover the query parser (`parseQuery`) and the search engine (`searchListings`) with 16 cases including edge cases like empty queries, no-match, combined filters, and score ordering.

@@ -12,7 +12,11 @@ interface PropertyCardProps {
 export default function PropertyCard({ listing, index }: PropertyCardProps) {
   const [imgError, setImgError] = useState(false);
 
-  const availableDate = new Date(listing.available + "T00:00:00").toLocaleDateString(
+  const availDate = new Date(listing.available + "T00:00:00");
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const isAvailableNow = availDate <= now;
+  const availableDate = availDate.toLocaleDateString(
     "en-US",
     { month: "short", day: "numeric", year: "numeric" }
   );
@@ -59,8 +63,15 @@ export default function PropertyCard({ listing, index }: PropertyCardProps) {
           <span>{listing.sqft.toLocaleString()} sqft</span>
         </div>
 
-        <div className="mt-2 text-sm text-gray-500">
-          Available {availableDate}
+        <div className="mt-2 flex items-center gap-1.5 text-sm">
+          {isAvailableNow ? (
+            <>
+              <span className="inline-block h-2 w-2 rounded-full bg-green-500" aria-hidden="true" />
+              <span className="text-green-600 font-medium">Available now</span>
+            </>
+          ) : (
+            <span className="text-gray-500">Available {availableDate}</span>
+          )}
         </div>
 
         <div className="mt-3 flex flex-wrap gap-1.5">

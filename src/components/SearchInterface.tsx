@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { searchListings, SearchResult } from "@/lib/search";
 import PropertyCard from "./PropertyCard";
 import SearchBar from "./SearchBar";
@@ -8,20 +8,42 @@ import SkeletonGrid from "./SkeletonGrid";
 import SortBar, { SortKey, SortDir } from "./SortBar";
 import ComparisonBar from "./ComparisonBar";
 
+const EXAMPLE_QUERIES = [
+  "1BR in Denver under $1,500",
+  "Apartments in Texas",
+  "Pool with a view",
+  "Under $1,300",
+];
+
 export default function SearchInterface() {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [isPending, startTransition] = useTransition();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSearch = () => {
+  const executeSearch = useCallback((searchQuery: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
     setHasSearched(true);
-    startTransition(() => {
-      setResult(searchListings(query));
-    });
-  };
+    setIsLoading(true);
+    // Brief delay so the skeleton is visible — in production this would be
+    // the real network round-trip to an API.
+    timerRef.current = setTimeout(() => {
+      setResult(searchListings(searchQuery));
+      setIsLoading(false);
+    }, 400);
+  }, []);
+
+  const handleSearch = useCallback(() => {
+    executeSearch(query);
+  }, [query, executeSearch]);
+
+  const handleExampleClick = useCallback((example: string) => {
+    setQuery(example);
+    executeSearch(example);
+  }, [executeSearch]);
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -56,7 +78,7 @@ export default function SearchInterface() {
         </p>
       </div>
 
-      <SearchBar query={query} onQueryChange={setQuery} onSearch={handleSearch} />
+      <SearchBar query={query} onQueryChange={setQuery} onSearch={handleSearch} isLoading={isLoading} />
 
       {/* Welcome state */}
       {!hasSearched && (
@@ -67,15 +89,27 @@ export default function SearchInterface() {
             </svg>
           </div>
           <p className="text-lg">Search for apartments by city, price, beds, or amenities.</p>
-          <p className="mt-1 text-sm">Press Enter or click Search to see all listings.</p>
+          <p className="mt-2 text-sm">Try one of these:</p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {EXAMPLE_QUERIES.map((example) => (
+              <button
+                key={example}
+                onClick={() => handleExampleClick(example)}
+                className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm text-gray-600
+                  shadow-sm transition-all duration-200 hover:border-primary hover:text-primary hover:shadow-md"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Loading state */}
-      {isPending && <SkeletonGrid />}
+      {isLoading && <SkeletonGrid />}
 
       {/* Results */}
-      {!isPending && hasSearched && result && (
+      {!isLoading && hasSearched && result && (
         <div role="status" aria-live="polite">
           {/* Conversational summary */}
           <div className="mb-6 rounded-lg bg-gray-50 px-4 py-3">
@@ -100,7 +134,19 @@ export default function SearchInterface() {
                 </svg>
               </div>
               <p className="text-lg font-medium text-gray-500">No matches found</p>
-              <p className="mt-1 text-sm">Try a different search — like a city name, price range, or amenity.</p>
+              <p className="mt-1 text-sm">Try a different search:</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {EXAMPLE_QUERIES.map((example) => (
+                  <button
+                    key={example}
+                    onClick={() => handleExampleClick(example)}
+                    className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm text-gray-600
+                      shadow-sm transition-all duration-200 hover:border-primary hover:text-primary hover:shadow-md"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

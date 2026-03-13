@@ -8,32 +8,43 @@ export interface ParsedQuery {
   keywords: string[];
 }
 
-const STATE_MAP: Record<string, string> = {
-  texas: "TX",
-  colorado: "CO",
-  arizona: "AZ",
-  georgia: "GA",
-};
+// Derive searchable values from the dataset so the parser stays in sync
+// with whatever listings exist — no manual hardcoding required.
+const CITIES = [...new Set(listings.map((l) => l.city.toLowerCase()))];
+const STATE_ABBRS = [...new Set(listings.map((l) => l.state.toLowerCase()))];
+
+// Full-name → abbreviation lookup. Only includes states present in the dataset
+// so the parser doesn't match irrelevant tokens.
+const STATE_FULL_NAMES: Record<string, string> = Object.fromEntries(
+  [
+    ["texas", "TX"],
+    ["colorado", "CO"],
+    ["arizona", "AZ"],
+    ["georgia", "GA"],
+  ].filter(([, abbr]) => STATE_ABBRS.includes(abbr.toLowerCase()))
+);
+
+// Reverse lookup used by buildSummary — derived from the same map.
+const STATE_DISPLAY_NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_FULL_NAMES).map(([full, abbr]) => [abbr, full.charAt(0).toUpperCase() + full.slice(1)])
+);
 
 export function parseQuery(query: string): ParsedQuery {
   const q = query.toLowerCase().trim();
 
   // Extract city
-  const cities = ["houston", "austin", "denver", "scottsdale", "atlanta", "katy"];
-  const city = cities.find((c) => q.includes(c)) ?? null;
+  const city = CITIES.find((c) => q.includes(c)) ?? null;
 
   // Extract state (full name or abbreviation)
   let state: string | null = null;
-  for (const [fullName, abbr] of Object.entries(STATE_MAP)) {
+  for (const [fullName, abbr] of Object.entries(STATE_FULL_NAMES)) {
     if (q.includes(fullName)) {
       state = abbr;
       break;
     }
   }
   if (!state) {
-    const stateAbbrs = ["tx", "co", "az", "ga"];
-    // Match state abbreviations as whole words
-    for (const abbr of stateAbbrs) {
+    for (const abbr of STATE_ABBRS) {
       const regex = new RegExp(`\\b${abbr}\\b`, "i");
       if (regex.test(q)) {
         state = abbr.toUpperCase();
@@ -182,8 +193,7 @@ function buildSummary(results: Listing[], parsed: ParsedQuery): string {
   if (parsed.city) {
     parts.push(`in ${capitalize(parsed.city)}`);
   } else if (parsed.state) {
-    const stateNames: Record<string, string> = { TX: "Texas", CO: "Colorado", AZ: "Arizona", GA: "Georgia" };
-    parts.push(`in ${stateNames[parsed.state] ?? parsed.state}`);
+    parts.push(`in ${STATE_DISPLAY_NAMES[parsed.state] ?? parsed.state}`);
   }
 
   if (parsed.beds !== null) {

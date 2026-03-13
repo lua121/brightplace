@@ -17,7 +17,10 @@ export default function ComparisonBar({ listings }: ComparisonBarProps) {
           const pct = (listing.rent / maxRent) * 100;
           return (
             <div key={listing.id} className="flex items-center gap-3">
-              <span className="w-36 shrink-0 truncate text-xs text-gray-600">
+              <span
+                className="w-28 shrink-0 truncate text-xs text-gray-600 sm:w-44"
+                title={listing.property_name}
+              >
                 {listing.property_name}
               </span>
               <div className="relative h-5 flex-1 rounded-full bg-gray-100 overflow-hidden">
