@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# brightplace
+
+Conversational apartment search — describe what you want in plain English and brightplace finds matching listings.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
+npm test         # unit tests (Vitest)
+npm run build    # production build
+npm run lint     # ESLint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Architecture Decisions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### NLP-style scoring search
+Queries are parsed into structured filters (city, state, beds, max price) plus free-text keywords. Each listing is scored against these dimensions — city match is weighted highest (10), beds/price at 8, state at 5, keyword/amenity hits at 3. Results are filtered by hard constraints first, then ranked by score. This gives users flexibility: "1br in Denver under $1,500" and "pool in Texas" both work naturally.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### No fake loading delay
+The search runs synchronously against an in-memory dataset of 6 listings. A previous version added a 600 ms `setTimeout` to simulate a network call — this was removed because it hurts perceived performance and misrepresents how the app works. Skeletons are still available as a component (`SkeletonGrid`) for future async data sources.
 
-## Learn More
+### Vitest for testing
+Vitest was chosen over Jest for zero-config Vite compatibility, fast startup, and native ESM/TypeScript support. Tests cover the query parser (`parseQuery`) and the search engine (`searchListings`) with 16 cases including edge cases like empty queries, no-match, combined filters, and score ordering.
 
-To learn more about Next.js, take a look at the following resources:
+## Bonus Features
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Sort controls** — Pill buttons to sort results by Price, Size, or Name with ascending/descending toggle.
+- **Rent comparison bar** — Horizontal bar chart comparing rent across results using a teal-to-orange gradient. Shown automatically for 2+ results.
+- **Image error fallback** — Broken image URLs gracefully show a gradient placeholder instead of a broken image icon.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Component Structure
 
-## Deploy on Vercel
+```
+SearchInterface       — orchestrates state, search, sort
+├── SearchBar         — input + button, aria-labeled
+├── SortBar           — sort pill buttons
+├── ComparisonBar     — rent comparison visualization
+└── PropertyCard      — individual listing card with image fallback
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Tradeoffs
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Fixed dataset**: The 6 listings are hardcoded per the spec. In production, `searchListings` would become an API call and the skeleton loading state would be used.
+- **No component tests**: UI component tests were skipped in favor of thorough unit tests on the search logic, which is where the core complexity lives.
+- **CSS-only comparison chart**: The rent comparison uses CSS percentage widths instead of a charting library — keeps the bundle small for a simple visualization.
