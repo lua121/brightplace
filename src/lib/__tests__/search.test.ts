@@ -125,17 +125,94 @@ describe("parseQuery", () => {
     expect(result.availableBy).toBe("2026-06-30");
   });
 
+  it("extracts minBeds from '1br or more'", () => {
+    const result = parseQuery("1br or more in denver");
+    expect(result.minBeds).toBe(1);
+    expect(result.beds).toBeNull();
+    expect(result.city).toBe("denver");
+  });
+
+  it("extracts minBeds from 'at least 2 bedrooms'", () => {
+    const result = parseQuery("at least 2 bedrooms");
+    expect(result.minBeds).toBe(2);
+    expect(result.beds).toBeNull();
+  });
+
+  it("extracts minBeds from '1+ beds'", () => {
+    const result = parseQuery("1+ beds");
+    expect(result.minBeds).toBe(1);
+    expect(result.beds).toBeNull();
+  });
+
+  it("keeps exact beds when no >= pattern", () => {
+    const result = parseQuery("1BR in Denver");
+    expect(result.beds).toBe(1);
+    expect(result.minBeds).toBeNull();
+  });
+
+  it("detects keywordMode 'and'", () => {
+    const result = parseQuery("pool and rooftop");
+    expect(result.keywordMode).toBe("and");
+    expect(result.keywords).toEqual(expect.arrayContaining(["pool", "rooftop"]));
+  });
+
+  it("detects keywordMode 'or'", () => {
+    const result = parseQuery("pool or patio");
+    expect(result.keywordMode).toBe("or");
+    expect(result.keywords).toEqual(expect.arrayContaining(["pool", "patio"]));
+  });
+
+  it("defaults keywordMode to 'or'", () => {
+    const result = parseQuery("pool rooftop");
+    expect(result.keywordMode).toBe("or");
+  });
+
+  it("filters generic housing words from keywords", () => {
+    const result = parseQuery("a place in texas");
+    expect(result.state).toBe("TX");
+    expect(result.keywords).toEqual([]);
+  });
+
+  it("extracts beds from '2 bedrooms in denver' (plural regression)", () => {
+    const result = parseQuery("2 bedrooms in denver");
+    expect(result.beds).toBe(2);
+    expect(result.city).toBe("denver");
+    expect(result.keywords).toEqual([]);
+  });
+
+  it("extracts exact baths from '1 bath apartment'", () => {
+    const result = parseQuery("1 bath apartment");
+    expect(result.baths).toBe(1);
+    expect(result.minBaths).toBeNull();
+  });
+
+  it("extracts minBaths from 'at least 2 bathrooms'", () => {
+    const result = parseQuery("at least 2 bathrooms");
+    expect(result.minBaths).toBe(2);
+    expect(result.baths).toBeNull();
+  });
+
+  it("extracts minBaths from '1+ baths'", () => {
+    const result = parseQuery("1+ baths");
+    expect(result.minBaths).toBe(1);
+    expect(result.baths).toBeNull();
+  });
+
   it("returns nulls for empty query", () => {
     const result = parseQuery("");
     expect(result.city).toBeNull();
     expect(result.state).toBeNull();
     expect(result.beds).toBeNull();
+    expect(result.minBeds).toBeNull();
+    expect(result.baths).toBeNull();
+    expect(result.minBaths).toBeNull();
     expect(result.maxPrice).toBeNull();
     expect(result.minPrice).toBeNull();
     expect(result.minSqft).toBeNull();
     expect(result.maxSqft).toBeNull();
     expect(result.availableBy).toBeNull();
     expect(result.keywords).toEqual([]);
+    expect(result.keywordMode).toBe("or");
   });
 });
 
@@ -251,5 +328,42 @@ describe("searchListings", () => {
     if (result.listings.length > 1) {
       expect(result.listings[0].city).toBe("Houston");
     }
+  });
+
+  it("minBeds filters with >=", () => {
+    const result = searchListings("1br or more");
+    expect(result.listings).toHaveLength(6);
+  });
+
+  it("keyword AND requires all keywords match", () => {
+    const result = searchListings("cabinets and pool");
+    expect(result.listings).toHaveLength(1);
+    expect(result.listings[0].property_name).toBe("Camden Legacy");
+  });
+
+  it("keyword OR matches any keyword", () => {
+    const result = searchListings("pool or patio");
+    expect(result.listings).toHaveLength(3);
+  });
+
+  it("keyword OR ignores unrecognized keywords", () => {
+    const result = searchListings("pool or xyznonexistent");
+    expect(result.listings).toHaveLength(2);
+  });
+
+  it("filters by exact baths — '1 bath' returns all (all have 1 bath)", () => {
+    const result = searchListings("1 bath");
+    expect(result.listings).toHaveLength(6);
+  });
+
+  it("filters by exact baths — '2 baths' returns 0 (none have 2 baths)", () => {
+    const result = searchListings("2 baths");
+    expect(result.listings).toHaveLength(0);
+  });
+
+  it("filters by bed + bath + state combined", () => {
+    const result = searchListings("1 bed 1 bath in texas");
+    expect(result.listings).toHaveLength(3);
+    result.listings.forEach((l) => expect(l.state).toBe("TX"));
   });
 });

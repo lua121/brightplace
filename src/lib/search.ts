@@ -4,12 +4,16 @@ export interface ParsedQuery {
   city: string | null;
   state: string | null;
   beds: number | null;
+  minBeds: number | null;
+  baths: number | null;
+  minBaths: number | null;
   maxPrice: number | null;
   minPrice: number | null;
   minSqft: number | null;
   maxSqft: number | null;
   availableBy: string | null;
   keywords: string[];
+  keywordMode: "and" | "or";
 }
 
 // Derive searchable values from the dataset so the parser stays in sync
@@ -72,13 +76,62 @@ export function parseQuery(query: string, now: Date = new Date()): ParsedQuery {
     }
   }
 
-  // Extract bed count
+  // Extract bed count (>= patterns first, then exact match)
   let beds: number | null = null;
-  const bedMatch = q.match(/(\d)\s*(?:br|bed|bedroom|beds|bedrooms)/i);
-  if (bedMatch) {
-    beds = parseInt(bedMatch[1], 10);
-  } else if (/\bstudio\b/i.test(q)) {
-    beds = 0;
+  let minBeds: number | null = null;
+  let bedMatchStr: RegExpMatchArray | null = null;
+
+  const minBedPatterns = [
+    /(?:at least|minimum|min)\s+(\d)\s*(?:bedrooms|bedroom|beds|bed|br)/i,
+    /(\d)\s*(?:bedrooms|bedroom|beds|bed|br)\s+or\s+more/i,
+    /(\d)\+\s*(?:bedrooms|bedroom|beds|bed|br)/i,
+    /(\d)\s*(?:bedrooms|bedroom|beds|bed|br)\+/i,
+  ];
+  for (const pattern of minBedPatterns) {
+    const match = q.match(pattern);
+    if (match) {
+      minBeds = parseInt(match[1], 10);
+      bedMatchStr = match;
+      break;
+    }
+  }
+
+  if (!bedMatchStr) {
+    const bedMatch = q.match(/(\d)\s*(?:bedrooms|bedroom|beds|bed|br)/i);
+    if (bedMatch) {
+      beds = parseInt(bedMatch[1], 10);
+      bedMatchStr = bedMatch;
+    } else if (/\bstudio\b/i.test(q)) {
+      beds = 0;
+    }
+  }
+
+  // Extract bath count (>= patterns first, then exact match)
+  let baths: number | null = null;
+  let minBaths: number | null = null;
+  let bathMatchStr: RegExpMatchArray | null = null;
+
+  const minBathPatterns = [
+    /(?:at least|minimum|min)\s+(\d)\s*(?:bathrooms|bathroom|baths|bath|ba)/i,
+    /(\d)\s*(?:bathrooms|bathroom|baths|bath|ba)\s+or\s+more/i,
+    /(\d)\+\s*(?:bathrooms|bathroom|baths|bath|ba)/i,
+    /(\d)\s*(?:bathrooms|bathroom|baths|bath|ba)\+/i,
+  ];
+  for (const pattern of minBathPatterns) {
+    const match = q.match(pattern);
+    if (match) {
+      minBaths = parseInt(match[1], 10);
+      bathMatchStr = match;
+      break;
+    }
+  }
+
+  if (!bathMatchStr) {
+    const bathMatch = q.match(/(\d)\s*(?:bathrooms|bathroom|baths|bath|ba)/i);
+    if (bathMatch) {
+      baths = parseInt(bathMatch[1], 10);
+      bathMatchStr = bathMatch;
+    }
   }
 
   // Extract sqft first (before price, to prevent "under 700 sq ft" matching as price)
@@ -199,7 +252,8 @@ export function parseQuery(query: string, now: Date = new Date()): ParsedQuery {
     const fullName = Object.entries(STATE_FULL_NAMES).find(([, abbr]) => abbr === state)?.[0];
     if (fullName) remaining = remaining.replace(new RegExp(`\\b${fullName}\\b`, "gi"), "");
   }
-  if (bedMatch) remaining = remaining.replace(bedMatch[0], "");
+  if (bedMatchStr) remaining = remaining.replace(bedMatchStr[0], "");
+  if (bathMatchStr) remaining = remaining.replace(bathMatchStr[0], "");
   if (sqftMatch) remaining = remaining.replace(sqftMatch[0], "");
   for (const pattern of pricePatterns) {
     remaining = remaining.replace(pattern, "");
@@ -210,19 +264,32 @@ export function parseQuery(query: string, now: Date = new Date()): ParsedQuery {
   // Clean up common filler words
   const fillers = [
     "i need", "i want", "looking for", "find me", "show me", "search for",
-    "apartments", "apartment", "in", "with", "and", "a", "an", "the", "that",
+    "apartments", "apartment", "in", "with", "a", "an", "the", "that",
     "has", "have", "near", "around", "available",
+    "place", "home", "house", "houses", "room", "something", "somewhere",
+    "cheap", "nice", "good", "great",
   ];
   for (const filler of fillers) {
     remaining = remaining.replace(new RegExp(`\\b${filler}\\b`, "gi"), "");
   }
+
+  // Detect keyword boolean mode before stripping and/or
+  let keywordMode: "and" | "or" = "or";
+  if (/\band\b/.test(remaining)) {
+    keywordMode = "and";
+  } else if (/\bor\b/.test(remaining)) {
+    keywordMode = "or";
+  }
+
+  // Strip and/or from remaining
+  remaining = remaining.replace(/\b(?:and|or)\b/gi, "");
 
   const keywords = remaining
     .split(/\s+/)
     .map((w) => w.replace(/[^a-z]/g, ""))
     .filter((w) => w.length > 2);
 
-  return { city, state, beds, maxPrice, minPrice, minSqft, maxSqft, availableBy, keywords };
+  return { city, state, beds, minBeds, baths, minBaths, maxPrice, minPrice, minSqft, maxSqft, availableBy, keywords, keywordMode };
 }
 
 export interface SearchResult {
@@ -238,12 +305,12 @@ export function searchListings(query: string, now?: Date): SearchResult {
     return {
       listings: [...listings],
       summary: "Here are all available apartments.",
-      parsed: { city: null, state: null, beds: null, maxPrice: null, minPrice: null, minSqft: null, maxSqft: null, availableBy: null, keywords: [] },
+      parsed: { city: null, state: null, beds: null, minBeds: null, baths: null, minBaths: null, maxPrice: null, minPrice: null, minSqft: null, maxSqft: null, availableBy: null, keywords: [], keywordMode: "or" },
     };
   }
 
   const parsed = now ? parseQuery(trimmed, now) : parseQuery(trimmed);
-  const { city, state, beds, maxPrice, minPrice, minSqft, maxSqft, availableBy, keywords } = parsed;
+  const { city, state, beds, minBeds, baths, minBaths, maxPrice, minPrice, minSqft, maxSqft, availableBy, keywords, keywordMode } = parsed;
 
   // Score each listing
   const scored = listings.map((listing) => {
@@ -260,6 +327,11 @@ export function searchListings(query: string, now?: Date): SearchResult {
 
     // Beds match
     if (beds !== null && listing.beds === beds) score += 8;
+    if (minBeds !== null && listing.beds >= minBeds) score += 8;
+
+    // Baths match
+    if (baths !== null && listing.baths === baths) score += 8;
+    if (minBaths !== null && listing.baths >= minBaths) score += 8;
 
     // Price match
     if (maxPrice !== null && listing.rent <= maxPrice) score += 8;
@@ -283,17 +355,18 @@ export function searchListings(query: string, now?: Date): SearchResult {
   });
 
   // Determine if we have any structured filters active
-  const hasFilters = city || state || beds !== null || maxPrice !== null || minPrice !== null || minSqft !== null || maxSqft !== null || availableBy;
+  const hasFilters = city || state || beds !== null || minBeds !== null || baths !== null || minBaths !== null || maxPrice !== null || minPrice !== null || minSqft !== null || maxSqft !== null || availableBy;
 
-  // Check which keywords actually match at least one listing
-  const unmatchedKeywords = keywords.filter((kw) =>
-    !listings.some((l) => {
-      const lName = l.property_name.toLowerCase();
-      const lCity = l.city.toLowerCase();
-      const lAmenities = l.amenities.join(" ").toLowerCase();
-      return lName.includes(kw) || lCity.includes(kw) || lAmenities.includes(kw);
-    })
-  );
+  // Helper: does a keyword match a given listing?
+  const matchesKw = (kw: string, l: Listing) => {
+    const lName = l.property_name.toLowerCase();
+    const lCity = l.city.toLowerCase();
+    const lAmenities = l.amenities.join(" ").toLowerCase();
+    return lName.includes(kw) || lCity.includes(kw) || lAmenities.includes(kw);
+  };
+
+  // Keywords recognized by at least one listing
+  const recognizedKeywords = keywords.filter((kw) => listings.some((l) => matchesKw(kw, l)));
 
   // Filter: if structured filters exist, require all structural matches
   let filtered = scored;
@@ -302,23 +375,28 @@ export function searchListings(query: string, now?: Date): SearchResult {
       if (city && item.listing.city.toLowerCase() !== city) return false;
       if (state && item.listing.state !== state) return false;
       if (beds !== null && item.listing.beds !== beds) return false;
+      if (minBeds !== null && item.listing.beds < minBeds) return false;
+      if (baths !== null && item.listing.baths !== baths) return false;
+      if (minBaths !== null && item.listing.baths < minBaths) return false;
       if (maxPrice !== null && item.listing.rent > maxPrice) return false;
       if (minPrice !== null && item.listing.rent < minPrice) return false;
       if (minSqft !== null && item.listing.sqft < minSqft) return false;
       if (maxSqft !== null && item.listing.sqft > maxSqft) return false;
       if (availableBy && item.listing.available > availableBy) return false;
-      // If any keyword matches nothing in the entire dataset, exclude all results
-      if (unmatchedKeywords.length > 0) return false;
-      // If keywords exist but none match this listing, exclude it
-      if (keywords.length > 0 && !hasFilters) {
-        const lName = item.listing.property_name.toLowerCase();
-        const lCity = item.listing.city.toLowerCase();
-        const lAmenities = item.listing.amenities.join(" ").toLowerCase();
-        const hasKeywordMatch = keywords.some((kw) =>
-          lName.includes(kw) || lCity.includes(kw) || lAmenities.includes(kw)
-        );
-        if (!hasKeywordMatch) return false;
+
+      // Keyword filtering
+      if (keywords.length > 0) {
+        if (keywordMode === "and") {
+          // All keywords must match this listing
+          if (!keywords.every((kw) => matchesKw(kw, item.listing))) return false;
+        } else {
+          // OR mode: ignore unrecognized keywords; if none recognized → 0 results
+          if (recognizedKeywords.length === 0) return false;
+          // Require at least one recognized keyword match on this listing
+          if (!recognizedKeywords.some((kw) => matchesKw(kw, item.listing))) return false;
+        }
       }
+
       return true;
     });
   }
@@ -349,6 +427,14 @@ function buildSummary(results: Listing[], parsed: ParsedQuery): string {
 
   if (parsed.beds !== null) {
     parts.push(`with ${parsed.beds} bedroom${parsed.beds !== 1 ? "s" : ""}`);
+  } else if (parsed.minBeds !== null) {
+    parts.push(`with ${parsed.minBeds}+ bedrooms`);
+  }
+
+  if (parsed.baths !== null) {
+    parts.push(`with ${parsed.baths} bathroom${parsed.baths !== 1 ? "s" : ""}`);
+  } else if (parsed.minBaths !== null) {
+    parts.push(`with ${parsed.minBaths}+ bathrooms`);
   }
 
   if (parsed.maxPrice !== null) {
