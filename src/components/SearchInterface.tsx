@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { searchListings, SearchResult } from "@/lib/search";
 import PropertyCard from "./PropertyCard";
 import SearchBar from "./SearchBar";
@@ -16,7 +17,11 @@ const EXAMPLE_QUERIES = [
 ];
 
 export default function SearchInterface() {
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initialQuery = searchParams.get("q") ?? "";
+
+  const [query, setQuery] = useState(initialQuery);
   const [result, setResult] = useState<SearchResult | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,17 +29,39 @@ export default function SearchInterface() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Clean up timer on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  // Run search from URL query param on initial load
+  useEffect(() => {
+    if (initialQuery) {
+      executeSearch(initialQuery);
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const executeSearch = useCallback((searchQuery: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     setHasSearched(true);
     setIsLoading(true);
+
+    // Sync query to URL so searches are shareable
+    const params = new URLSearchParams();
+    if (searchQuery) params.set("q", searchQuery);
+    router.replace(params.toString() ? `?${params.toString()}` : "/", { scroll: false });
+
     // Brief delay so the skeleton is visible — in production this would be
     // the real network round-trip to an API.
     timerRef.current = setTimeout(() => {
       setResult(searchListings(searchQuery));
       setIsLoading(false);
     }, 400);
-  }, []);
+  }, [router]);
 
   const handleSearch = useCallback(() => {
     executeSearch(query);

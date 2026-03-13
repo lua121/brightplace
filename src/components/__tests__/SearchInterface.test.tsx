@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import SearchInterface from "../SearchInterface";
 
+// Mock next/navigation for useSearchParams / useRouter
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ replace: vi.fn() }),
+}));
+
 // Mock next/image to a plain img
 vi.mock("next/image", () => ({
   default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => {
@@ -82,5 +88,72 @@ describe("SearchInterface", () => {
     fireEvent.submit(screen.getByRole("search"));
     submitSearch();
     expect(screen.getByText("Camden Phipps")).toBeInTheDocument();
+  });
+
+  it("sorts results by price ascending and descending", () => {
+    render(<SearchInterface />);
+    fireEvent.submit(screen.getByRole("search"));
+    submitSearch();
+
+    // Default sort is price ascending — first card should be cheapest
+    const priceBtn = screen.getByRole("button", { name: /Price/ });
+    expect(priceBtn).toHaveTextContent("Price ↑");
+
+    // Click Price again to toggle to descending
+    fireEvent.click(priceBtn);
+    expect(priceBtn).toHaveTextContent("Price ↓");
+  });
+
+  it("switches sort key when a different pill is clicked", () => {
+    render(<SearchInterface />);
+    fireEvent.submit(screen.getByRole("search"));
+    submitSearch();
+
+    const nameBtn = screen.getByRole("button", { name: /Name/ });
+    fireEvent.click(nameBtn);
+    // Name should now be active ascending
+    expect(nameBtn).toHaveTextContent("Name ↑");
+    // Price should no longer show an arrow
+    expect(screen.getByRole("button", { name: "Price" })).toBeInTheDocument();
+  });
+
+  it("shows comparison bar for multi-result searches", () => {
+    render(<SearchInterface />);
+    fireEvent.submit(screen.getByRole("search"));
+    submitSearch();
+    expect(screen.getByText("Rent Comparison")).toBeInTheDocument();
+  });
+
+  it("hides comparison bar when only one result", () => {
+    render(<SearchInterface />);
+    const input = screen.getByLabelText("Search for apartments");
+    fireEvent.change(input, { target: { value: "denver" } });
+    fireEvent.submit(screen.getByRole("search"));
+    submitSearch();
+    expect(screen.queryByText("Rent Comparison")).not.toBeInTheDocument();
+  });
+
+  it("shows gradient fallback when image fails to load", () => {
+    render(<SearchInterface />);
+    const input = screen.getByLabelText("Search for apartments");
+    fireEvent.change(input, { target: { value: "denver" } });
+    fireEvent.submit(screen.getByRole("search"));
+    submitSearch();
+
+    const img = screen.getByAltText(/Camden RiNo/);
+    fireEvent.error(img);
+
+    // After error, the gradient placeholder should appear instead of the img
+    expect(screen.queryByAltText(/Camden RiNo/)).not.toBeInTheDocument();
+  });
+
+  it("executes search when an example query is clicked", () => {
+    render(<SearchInterface />);
+    const exampleBtn = screen.getByRole("button", { name: "Under $1,300" });
+    fireEvent.click(exampleBtn);
+    submitSearch();
+    // Should show results filtered by price (names appear in both card and comparison bar)
+    expect(screen.getAllByText("Camden Stoneleigh").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Camden Downs at Cinco Ranch").length).toBeGreaterThanOrEqual(1);
   });
 });
