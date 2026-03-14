@@ -4,16 +4,20 @@ interface ComparisonBarProps {
   listings: Listing[];
 }
 
+const MAX_BARS = 6;
+
 export default function ComparisonBar({ listings }: ComparisonBarProps) {
   if (listings.length < 2) return null;
 
+  const visible = listings.slice(0, MAX_BARS);
+  const hiddenCount = listings.length - visible.length;
   const maxRent = Math.max(...listings.map((l) => l.rent));
 
   return (
     <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
       <h3 className="mb-3 text-sm font-semibold text-gray-600">Rent Comparison</h3>
       <div className="space-y-2">
-        {listings.map((listing) => {
+        {visible.map((listing) => {
           const pct = (listing.rent / maxRent) * 100;
           return (
             <div key={listing.id} className="flex items-center gap-3">
@@ -38,6 +42,11 @@ export default function ComparisonBar({ listings }: ComparisonBarProps) {
             </div>
           );
         })}
+        {hiddenCount > 0 && (
+          <p className="pt-1 text-xs text-gray-400">
+            +{hiddenCount} more not shown
+          </p>
+        )}
       </div>
     </div>
   );
