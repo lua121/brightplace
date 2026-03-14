@@ -42,27 +42,32 @@ The rent comparison bar uses CSS percentage widths instead of a charting library
 
 ## Bonus Features
 
+- **Side-by-side comparison modal** — Select up to 4 properties via checkbox overlays on cards, then open a full-screen comparison table covering rent, size, location, availability, and amenities. Best values (lowest rent, most sqft) are highlighted in green for quick evaluation.
 - **Sort controls** — Pill buttons to sort results by Price, Size, or Name with ascending/descending toggle.
-- **Rent comparison bar** — Horizontal bar chart comparing rent across results using a teal-to-orange gradient. Shown automatically for 2+ results.
+- **Rent comparison bar** — Horizontal bar chart comparing rent across results using a teal-to-orange gradient. Shown automatically for 2+ results, capped at 6 entries.
 - **Image error fallback** — Broken image URLs gracefully show a gradient placeholder instead of a broken image icon.
 - **Shareable URLs** — Search query is synced to `?q=` so results can be bookmarked and shared.
 
 ## Component Structure
 
 ```
-SearchInterface       — orchestrates state, search, sort, URL sync
+SearchInterface       — orchestrates state, search, sort, comparison, URL sync
 ├── SearchBar         — input + button, aria-labeled
 ├── SortBar           — sort pill buttons
 ├── ComparisonBar     — rent comparison visualization
-└── PropertyCard      — listing card with image fallback
+├── ComparisonDock    — sticky bottom bar with selection count + compare action
+├── ComparisonModal   — accessible side-by-side comparison table (focus trap, Escape)
+└── PropertyCard      — listing card with image fallback + compare checkbox
 ```
 
 ## Testing
 
 Vitest with jsdom. Tests cover:
 
-- **Search engine** (`parseQuery`, `searchListings`) — 40 cases covering city/state/beds/price/sqft/availability parsing, combined queries, unmatched keyword filtering, edge cases, score ordering, and empty/no-match states.
-- **UI integration** (`SearchInterface`) — 13 cases covering render, welcome state, skeleton loading, filtering, empty state, sort toggling, comparison bar visibility, image fallback, and example query buttons.
+100 tests across 4 test files:
+
+- **Search engine** (`parseQuery`, `searchListings`) — query parsing, combined filters, keyword matching, edge cases, score ordering, security inputs.
+- **UI integration** (`SearchInterface`, `PropertyCard`, `ComparisonBar`) — rendering, user interactions, loading/empty states, sort toggling, accessibility, image fallback.
 
 ## Deployment
 
