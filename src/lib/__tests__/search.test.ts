@@ -80,6 +80,11 @@ describe("parseQuery", () => {
     expect(result.maxSqft).toBe(600);
   });
 
+  it("extracts max price from 'under X dollars'", () => {
+    const result = parseQuery("under 1300 dollars");
+    expect(result.maxPrice).toBe(1300);
+  });
+
   it("extracts minPrice from 'over $X'", () => {
     const result = parseQuery("over $1200");
     expect(result.minPrice).toBe(1200);
@@ -250,10 +255,15 @@ describe("searchListings", () => {
     expect(result.listings).toHaveLength(0);
   });
 
-  it("returns empty when unrecognized location is combined with valid filters", () => {
+  it("treats unrecognized keywords as soft when structural filters are present", () => {
     const now = new Date("2026-03-13");
+    // "brazil" is unrecognized but structural filters (sqft, availability) still apply
     const result = searchListings("bigger than 800 sq ft and available today in brazil", now);
-    expect(result.listings).toHaveLength(0);
+    expect(result.listings.length).toBeGreaterThan(0);
+    result.listings.forEach((l) => {
+      expect(l.sqft).toBeGreaterThanOrEqual(800);
+      expect(l.available <= "2026-03-13").toBe(true);
+    });
   });
 
   it("filters by sqft", () => {
@@ -361,9 +371,83 @@ describe("searchListings", () => {
     expect(result.listings).toHaveLength(0);
   });
 
+  it("filters by price with 'dollars' word", () => {
+    const result = searchListings("1BR in texas under 1300 dollars");
+    expect(result.listings.length).toBeGreaterThanOrEqual(1);
+    result.listings.forEach((l) => {
+      expect(l.state).toBe("TX");
+      expect(l.rent).toBeLessThanOrEqual(1300);
+    });
+  });
+
   it("filters by bed + bath + state combined", () => {
     const result = searchListings("1 bed 1 bath in texas");
     expect(result.listings).toHaveLength(3);
     result.listings.forEach((l) => expect(l.state).toBe("TX"));
+  });
+
+  it("handles the spec example: '1BR in Denver under $1,500 with modern finishes'", () => {
+    const result = searchListings("I need a 1BR in Denver under $1,500 with modern finishes");
+    // Should return Camden RiNo (Denver, 1BR, $1,389) — keywords are soft
+    expect(result.listings).toHaveLength(1);
+    expect(result.listings[0].property_name).toBe("Camden RiNo");
+    expect(result.listings[0].city).toBe("Denver");
+    expect(result.listings[0].beds).toBe(1);
+    expect(result.listings[0].rent).toBeLessThanOrEqual(1500);
+  });
+
+  it("returns empty for keyword-only query with no matches", () => {
+    const result = searchListings("xyz nonexistent");
+    expect(result.listings).toHaveLength(0);
+  });
+
+  // --- Edge cases ---
+
+  it("handles XSS-like input without crashing", () => {
+    const result = searchListings('<script>alert("xss")</script>');
+    expect(result.listings).toHaveLength(0);
+    expect(result.summary).toBe("No apartments match your search. Try adjusting your criteria.");
+  });
+
+  it("handles HTML injection in query", () => {
+    const result = searchListings('<img src=x onerror=alert(1)> denver');
+    expect(result.listings).toHaveLength(1);
+    expect(result.listings[0].city).toBe("Denver");
+  });
+
+  it("handles special characters without crashing", () => {
+    const inputs = [
+      "apartments (in) denver",
+      "under $1,500 && pool",
+      "denver | austin",
+      "1br; drop table;",
+      "pool \\n rooftop",
+      '{"city": "denver"}',
+      "apartments in denver!!!",
+    ];
+    for (const input of inputs) {
+      expect(() => searchListings(input)).not.toThrow();
+    }
+  });
+
+  it("handles very long query without crashing", () => {
+    const longQuery = "apartments in denver ".repeat(200);
+    expect(() => searchListings(longQuery)).not.toThrow();
+    const result = searchListings(longQuery);
+    expect(result.listings).toHaveLength(1);
+    expect(result.listings[0].city).toBe("Denver");
+  });
+
+  it("handles empty and whitespace-only queries", () => {
+    expect(searchListings("").listings).toHaveLength(6);
+    expect(searchListings("   ").listings).toHaveLength(6);
+    expect(searchListings("\t\n").listings).toHaveLength(6);
+  });
+
+  it("handles regex metacharacters in query without crashing", () => {
+    const inputs = ["[pool]", "pool.*rooftop", "den(ver", "austin+", "^houston$"];
+    for (const input of inputs) {
+      expect(() => searchListings(input)).not.toThrow();
+    }
   });
 });

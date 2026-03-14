@@ -156,4 +156,39 @@ describe("SearchInterface", () => {
     expect(screen.getAllByText("Camden Stoneleigh").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Camden Downs at Cinco Ranch").length).toBeGreaterThanOrEqual(1);
   });
+
+  // --- Accessibility ---
+
+  it("has an accessible search landmark", () => {
+    render(<SearchInterface />);
+    expect(screen.getByRole("search")).toBeInTheDocument();
+  });
+
+  it("search input has an accessible label", () => {
+    render(<SearchInterface />);
+    const input = screen.getByLabelText("Search for apartments");
+    expect(input).toHaveAttribute("type", "text");
+  });
+
+  it("results region has aria-live for screen reader announcements", () => {
+    render(<SearchInterface />);
+    fireEvent.submit(screen.getByRole("search"));
+    submitSearch();
+    const statusRegion = screen.getByRole("status");
+    expect(statusRegion).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("decorative icons are hidden from assistive technology", () => {
+    render(<SearchInterface />);
+    const hiddenSvgs = document.querySelectorAll('[aria-hidden="true"]');
+    expect(hiddenSvgs.length).toBeGreaterThan(0);
+  });
+
+  it("images have descriptive alt text", () => {
+    render(<SearchInterface />);
+    fireEvent.submit(screen.getByRole("search"));
+    submitSearch();
+    const img = screen.getByAltText(/Camden RiNo in Denver, CO/);
+    expect(img).toBeInTheDocument();
+  });
 });
