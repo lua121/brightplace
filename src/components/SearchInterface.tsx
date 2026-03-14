@@ -8,6 +8,8 @@ import SearchBar from "./SearchBar";
 import SkeletonGrid from "./SkeletonGrid";
 import SortBar, { SortKey, SortDir } from "./SortBar";
 import ComparisonBar from "./ComparisonBar";
+import ComparisonDock from "./ComparisonDock";
+import ComparisonModal from "./ComparisonModal";
 
 const EXAMPLE_QUERIES = [
   "1BR in Denver under $1,500",
@@ -27,7 +29,26 @@ export default function SearchInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [showCompareModal, setShowCompareModal] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const toggleCompare = useCallback((id: string) => {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < 4) {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const compareListings = useMemo(() => {
+    if (!result) return [];
+    return result.listings.filter((l) => compareIds.has(l.id));
+  }, [result, compareIds]);
 
   // Clean up timer on unmount to prevent memory leaks
   useEffect(() => {
@@ -136,6 +157,18 @@ export default function SearchInterface() {
       {isLoading && <SkeletonGrid />}
 
       {/* Results */}
+      <ComparisonDock
+        selectedListings={compareListings}
+        onCompare={() => setShowCompareModal(true)}
+        onClear={() => setCompareIds(new Set())}
+      />
+      {showCompareModal && compareListings.length >= 2 && (
+        <ComparisonModal
+          listings={compareListings}
+          onClose={() => setShowCompareModal(false)}
+        />
+      )}
+
       {!isLoading && hasSearched && result && (
         <div role="status" aria-live="polite">
           {/* Conversational summary */}
@@ -149,7 +182,14 @@ export default function SearchInterface() {
               <ComparisonBar listings={sortedListings} />
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {sortedListings.map((listing, i) => (
-                  <PropertyCard key={listing.id} listing={listing} index={i} />
+                  <PropertyCard
+                    key={listing.id}
+                    listing={listing}
+                    index={i}
+                    isSelected={compareIds.has(listing.id)}
+                    onToggleCompare={toggleCompare}
+                    compareDisabled={compareIds.size >= 4}
+                  />
                 ))}
               </div>
             </>
